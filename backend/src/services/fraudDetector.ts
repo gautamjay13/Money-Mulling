@@ -365,4 +365,92 @@ private detectFraudRings(): void {
   getTransactions(): Transaction[] {
     return this.transactions;
   }
+
+
+// trying json outpuut
+
+generateReport(processingTimeSeconds: number) {
+  const suspicious_accounts = this.suspiciousAccounts.map(acc => ({
+    account_id: acc.id,
+    suspicion_score: Number((acc.score * 100).toFixed(1)), // convert 0-1 → 0-100
+    detected_patterns: acc.patterns,
+    ring_id: acc.ringId || null
+  }));
+
+  const fraud_rings = this.fraudRings.map(ring => ({
+    ring_id: ring.ringId,
+    member_accounts: ring.members,
+    suspicious_member_count: ring.members.filter(id =>
+      this.suspiciousAccounts.some(a => a.id === id)
+    ).length,
+    total_member_count: ring.memberCount,
+    pattern_type: this.normalizePattern(ring.pattern),
+    risk_score: Number((ring.riskScore * 100).toFixed(1)),
+    total_ring_volume: this.calculateTotalRingVolume(ring.members),
+    average_transaction_count: this.calculateAverageTransactionCount(ring.members),
+    ring_density: this.calculateRingDensity(ring.members)
+  }));
+
+  return {
+    suspicious_accounts,
+    fraud_rings,
+    summary: {
+      total_accounts_analyzed: this.accountStats.size,
+      suspicious_accounts_flagged: this.suspiciousAccounts.length,
+      fraud_rings_detected: this.fraudRings.length,
+      processing_time_seconds: Number(processingTimeSeconds.toFixed(2))
+    }
+  };
+}
+private normalizePattern(pattern: string): string {
+  switch (pattern) {
+    case "Circular Layering": return "cycle";
+    case "Star Topology": return "star";
+    case "Funnel & Disperse": return "funnel";
+    case "Rapid Smurfing": return "smurfing";
+    case "Chain Transfer": return "chain";
+    default: return "unknown";
+  }
+}
+private calculateTotalRingVolume(members: string[]): number {
+  let total = 0;
+
+  for (const id of members) {
+    const stats = this.accountStats.get(id);
+    if (stats) {
+      total += stats.totalIncoming + stats.totalOutgoing;
+    }
+  }
+
+  return Number(total.toFixed(2));
+}
+private calculateAverageTransactionCount(members: string[]): number {
+  let total = 0;
+
+  for (const id of members) {
+    const stats = this.accountStats.get(id);
+    if (stats) total += stats.transactionCount;
+  }
+
+  return Number((total / members.length).toFixed(1));
+}
+private calculateRingDensity(members: string[]): number {
+  let connections = 0;
+
+  for (const id of members) {
+    const stats = this.accountStats.get(id);
+    if (!stats) continue;
+
+    for (const conn of stats.uniqueConnections) {
+      if (members.includes(conn)) connections++;
+    }
+  }
+
+  const maxPossible = members.length * (members.length - 1);
+
+  return maxPossible > 0
+    ? Number((connections / maxPossible).toFixed(2))
+    : 0;
+}
+
 }
